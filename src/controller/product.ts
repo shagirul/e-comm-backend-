@@ -10,6 +10,8 @@ import ErrorHandler from "../utils/utility_class.js";
 import { rm } from "fs";
 import { myCache } from "../app.js";
 import { invalidateCache } from "../utils/feature.js";
+import { deleteObject, ref } from "firebase/storage";
+import { storage } from "../firebase.js";
 // import { faker } from "@faker-js/faker";
 
 // Revalidate on New,Update,Delete Product & on New Order
@@ -81,27 +83,46 @@ export const getSingleProduct = TryCatch(async (req, res, next) => {
   });
 });
 
+// export const newProduct = TryCatch(
+//   async (req: Request<{}, {}, NewProductRequestBody>, res, next) => {
+//     const { name, price, stock, category, } = req.body;
+//     const photo = req.file;
+
+//     if (!photo) return next(new ErrorHandler("Please add Photo", 400));
+
+//     if (!name || !price || !stock || !category) {
+//       rm(photo.path, () => {
+//         console.log("Deleted");
+//       });
+
+//       return next(new ErrorHandler("Please enter All Fields", 400));
+//     }
+
+//     await Product.create({
+//       name,
+//       price,
+//       stock,
+//       category: category.toLowerCase(),
+//       photo: photo.path,
+//     });
+
+//     invalidateCache({ product: true, admin: true });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Product Created Successfully",
+//     });
+//   }
+// );
 export const newProduct = TryCatch(
   async (req: Request<{}, {}, NewProductRequestBody>, res, next) => {
-    const { name, price, stock, category } = req.body;
-    const photo = req.file;
-
-    if (!photo) return next(new ErrorHandler("Please add Photo", 400));
-
-    if (!name || !price || !stock || !category) {
-      rm(photo.path, () => {
-        console.log("Deleted");
-      });
-
-      return next(new ErrorHandler("Please enter All Fields", 400));
-    }
-
+    const { name, price, stock, category, fileDownloadURL } = req.body;
     await Product.create({
       name,
       price,
       stock,
       category: category.toLowerCase(),
-      photo: photo.path,
+      photo: fileDownloadURL,
     });
 
     invalidateCache({ product: true, admin: true });
@@ -113,19 +134,57 @@ export const newProduct = TryCatch(
   }
 );
 
+// export const updateProduct = TryCatch(async (req, res, next) => {
+//   const { id } = req.params;
+//   const { name, price, stock, category } = req.body;
+//   const photo = req.file;
+//   const product = await Product.findById(id);
+
+//   if (!product) return next(new ErrorHandler("Product Not Found", 404));
+
+//   if (photo) {
+//     rm(product.photo!, () => {
+//       console.log("Old Photo Deleted");
+//     });
+//     product.photo = photo.path;
+//   }
+
+//   if (name) product.name = name;
+//   if (price) product.price = price;
+//   if (stock) product.stock = stock;
+//   if (category) product.category = category;
+
+//   await product.save();
+
+//   invalidateCache({
+//     product: true,
+//     productId: String(product._id),
+//     admin: true,
+//   });
+
+//   return res.status(200).json({
+//     success: true,
+//     message: "Product Updated Successfully",
+//   });
+// });
 export const updateProduct = TryCatch(async (req, res, next) => {
   const { id } = req.params;
-  const { name, price, stock, category } = req.body;
-  const photo = req.file;
+  const { name, price, stock, category, fileDownloadURL } = req.body;
+  // const photo = req.file;
   const product = await Product.findById(id);
 
   if (!product) return next(new ErrorHandler("Product Not Found", 404));
-
-  if (photo) {
-    rm(product.photo!, () => {
-      console.log("Old Photo Deleted");
-    });
-    product.photo = photo.path;
+  const fileRef = ref(storage, product.photo);
+  if (fileDownloadURL) {
+    // rm(product.photo!, () => {
+    //   console.log("Old Photo Deleted");
+    // });
+    try {
+      await deleteObject(fileRef);
+    } catch (error) {
+      next(new ErrorHandler("product not deleted sucessfully", 404));
+    }
+    product.photo = fileDownloadURL;
   }
 
   if (name) product.name = name;
@@ -147,13 +206,37 @@ export const updateProduct = TryCatch(async (req, res, next) => {
   });
 });
 
+// export const deleteProduct = TryCatch(async (req, res, next) => {
+//   const product = await Product.findById(req.params.id);
+//   if (!product) return next(new ErrorHandler("Product Not Found", 404));
+
+//   rm(product.photo!, () => {
+//     console.log("Product Photo Deleted");
+//   });
+
+//   await product.deleteOne();
+
+//   invalidateCache({
+//     product: true,
+//     productId: String(product._id),
+//     admin: true,
+//   });
+
+//   return res.status(200).json({
+//     success: true,
+//     message: "Product Deleted Successfully",
+//   });
+// });
 export const deleteProduct = TryCatch(async (req, res, next) => {
   const product = await Product.findById(req.params.id);
   if (!product) return next(new ErrorHandler("Product Not Found", 404));
 
-  rm(product.photo!, () => {
-    console.log("Product Photo Deleted");
-  });
+  const fileRef = ref(storage, product.photo);
+  try {
+    await deleteObject(fileRef);
+  } catch (error) {
+    next(new ErrorHandler("product not deleted sucessfully", 404));
+  }
 
   await product.deleteOne();
 
